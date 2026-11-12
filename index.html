@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<base target="_top">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ATM Access</title>
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 20%, #1c2b4a 0%, #0a0f1c 70%);
+    font-family: 'Segoe UI', Roboto, Arial, sans-serif; color: #e8eefc;
+  }
+  .atm {
+    width: 360px; max-width: 94vw; padding: 26px 24px 28px;
+    background: linear-gradient(160deg, #2a3350, #131a2e);
+    border-radius: 26px; border: 1px solid #3b4670;
+    box-shadow: 0 30px 70px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.08);
+  }
+  .brand { text-align: center; letter-spacing: 6px; font-weight: 700; font-size: 15px; color: #d4af37; margin-bottom: 14px; }
+  .brand small { display:block; letter-spacing: 2px; font-size: 10px; color:#8e9ac0; font-weight:400; margin-top:4px; }
+
+  /* Kamera */
+  .cam {
+    position: relative; width: 100%; height: 150px; margin-bottom: 14px; overflow: hidden;
+    border-radius: 12px; background: #05070d; border: 2px solid #0e0e0e;
+    box-shadow: 0 0 0 2px #3a4466, inset 0 0 20px rgba(0,0,0,.8);
+  }
+  .cam video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
+  .cam .rec {
+    position: absolute; top: 8px; left: 10px; font-size: 10px; letter-spacing: 2px; font-weight: 700;
+    color: #fff; background: rgba(0,0,0,.55); padding: 3px 8px; border-radius: 10px;
+  }
+  .cam .rec i { display:inline-block; width:8px; height:8px; border-radius:50%; background:#777; margin-right:6px; }
+  .cam.on .rec i { background:#ff2d2d; animation: blink 1s infinite; }
+  .cam .info {
+    position: absolute; bottom: 0; left: 0; right: 0; padding: 4px 10px; font-size: 10px; letter-spacing: 1px;
+    background: rgba(0,0,0,.6); color: #7dffb0; text-align: center;
+  }
+  .cam.off .info { color: #ff8a8a; }
+  .cam .flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; }
+  .cam .flash.go { animation: flash .35s; }
+  @keyframes blink { 50% { opacity: .2; } }
+  @keyframes flash { 0%{opacity:.9} 100%{opacity:0} }
+
+  .screen {
+    background: linear-gradient(180deg, #06210f, #031208);
+    border: 3px solid #0e0e0e; border-radius: 14px; padding: 18px 16px;
+    min-height: 140px; text-align: center;
+    box-shadow: inset 0 0 30px rgba(0,255,120,.12), 0 0 0 2px #3a4466;
+  }
+  .prompt { font-size: 13px; letter-spacing: 2px; color: #7dffb0; text-transform: uppercase; margin-bottom: 16px; }
+  .dots { display: flex; justify-content: center; gap: 14px; margin-bottom: 16px; }
+  .dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #3fbf7a; transition: .15s; }
+  .dot.on { background: #7dffb0; box-shadow: 0 0 10px #7dffb0; }
+  .result { min-height: 30px; font-size: 20px; font-weight: 800; letter-spacing: 2px; }
+  .result.ok   { color: #19ff5a; text-shadow: 0 0 12px rgba(25,255,90,.7); }
+  .result.err  { color: #ff2d2d; text-shadow: 0 0 12px rgba(255,45,45,.7); }
+  .result.load { color: #bfe9cf; font-size: 14px; font-weight: 400; }
+  .shake { animation: shake .4s; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
+  .slot { height: 8px; width: 60%; margin: 18px auto 16px; border-radius: 6px; background: #05070d; box-shadow: inset 0 2px 4px #000, 0 1px 0 #3b4670; }
+  .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .key {
+    height: 56px; border: none; border-radius: 12px; font-size: 22px; font-weight: 600;
+    color: #f1f4ff; cursor: pointer; font-family: inherit;
+    background: linear-gradient(180deg, #4a5578, #2f3957);
+    box-shadow: 0 4px 0 #1b2238, 0 6px 10px rgba(0,0,0,.4);
+    transition: transform .05s, box-shadow .05s;
+  }
+  .key:active { transform: translateY(3px); box-shadow: 0 1px 0 #1b2238; }
+  .key.clear { background: linear-gradient(180deg, #e0a526, #b87d0a); font-size: 13px; letter-spacing: 1px; box-shadow: 0 4px 0 #6b4806, 0 6px 10px rgba(0,0,0,.4); }
+  .key.enter { background: linear-gradient(180deg, #2fbf5a, #1c8a3c); font-size: 13px; letter-spacing: 1px; box-shadow: 0 4px 0 #0f5224, 0 6px 10px rgba(0,0,0,.4); }
+  .notice { margin-top: 14px; text-align: center; font-size: 10px; color: #8e9ac0; letter-spacing: .5px; }
+</style>
+</head>
+<body>
+  <div class="atm" id="atm">
+    <div class="brand">SECURE ATM<small>SISTEM AKSES PIN</small></div>
+
+    <div class="cam off" id="camBox">
+      <video id="cam" autoplay muted playsinline></video>
+      <div class="rec"><i></i>REC</div>
+      <div class="info" id="camInfo">MENGAKTIFKAN KAMERA...</div>
+      <div class="flash" id="flash"></div>
+    </div>
+
+    <div class="screen">
+      <div class="prompt">Masukkan PIN Anda</div>
+      <div class="dots" id="dots">
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      </div>
+      <div class="result" id="result"></div>
+    </div>
+
+    <div class="slot"></div>
+
+    <div class="keypad">
+      <button class="key" onclick="tekan('1')">1</button>
+      <button class="key" onclick="tekan('2')">2</button>
+      <button class="key" onclick="tekan('3')">3</button>
+      <button class="key" onclick="tekan('4')">4</button>
+      <button class="key" onclick="tekan('5')">5</button>
+      <button class="key" onclick="tekan('6')">6</button>
+      <button class="key" onclick="tekan('7')">7</button>
+      <button class="key" onclick="tekan('8')">8</button>
+      <button class="key" onclick="tekan('9')">9</button>
+      <button class="key clear" onclick="tekan('CLEAR')">CLEAR</button>
+      <button class="key" onclick="tekan('0')">0</button>
+      <button class="key enter" onclick="tekan('ENTER')">ENTER</button>
+    </div>
+
+    <div class="notice">Area ini diawasi kamera. Foto direkam setiap percobaan akses.</div>
+  </div>
+
+<script>
+  var PANJANG_PIN = 5;
+  var pin = '';
+  var busy = false;
+
+  var dots     = document.querySelectorAll('#dots .dot');
+  var resultEl = document.getElementById('result');
+  var atmEl    = document.getElementById('atm');
+  var video    = document.getElementById('cam');
+  var camBox   = document.getElementById('camBox');
+  var camInfo  = document.getElementById('camInfo');
+  var flashEl  = document.getElementById('flash');
+
+  var kameraAktif = false;
+  var jmlWajah = -1;            // -1 = deteksi belum tersedia
+  var modelSiap = false;
+
+  /* ================= KAMERA ================= */
+  function setCam(teks, aktif) {
+    camInfo.textContent = teks;
+    camBox.className = 'cam ' + (aktif ? 'on' : 'off');
+  }
+
+  function mulaiKamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCam('KAMERA TIDAK DIDUKUNG BROWSER', false);
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' }, audio: false })
+      .then(function(stream) {
+        video.srcObject = stream;
+        kameraAktif = true;
+        setCam('KAMERA AKTIF', true);
+        muatModelWajah();
+      })
+      .catch(function(err) {
+        kameraAktif = false;
+        setCam('KAMERA DIBLOKIR / TIDAK ADA', false);
+      });
+  }
+
+  /* ============ DETEKSI WAJAH (face-api.js) ============ */
+  function muatModelWajah() {
+    if (typeof faceapi === 'undefined') return;
+    faceapi.nets.tinyFaceDetector
+      .loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/')
+      .then(function() {
+        modelSiap = true;
+        setInterval(deteksiWajah, 800);
+      })
+      .catch(function() { modelSiap = false; });
+  }
+
+  function deteksiWajah() {
+    if (!kameraAktif || !modelSiap || video.readyState < 2) return;
+    faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
+      .then(function(hasil) {
+        jmlWajah = hasil.length;
+        setCam(jmlWajah > 0 ? 'KAMERA AKTIF • ' + jmlWajah + ' WAJAH' : 'KAMERA AKTIF • TIDAK ADA WAJAH', true);
+      })
+      .catch(function() {});
+  }
+
+  /* ============ SNAPSHOT ============ */
+  function ambilFoto() {
+    if (!kameraAktif || video.readyState < 2) return null;
+    var c = document.createElement('canvas');
+    c.width = 480; c.height = 360;
+    var ctx = c.getContext('2d');
+    ctx.drawImage(video, 0, 0, c.width, c.height);
+    ctx.fillStyle = 'rgba(0,0,0,.55)';
+    ctx.fillRect(0, c.height - 22, c.width, 22);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '13px monospace';
+    ctx.fillText(new Date().toLocaleString('id-ID'), 8, c.height - 7);
+    flashEl.className = 'flash'; void flashEl.offsetWidth; flashEl.className = 'flash go';
+    return c.toDataURL('image/jpeg', 0.7);
+  }
+
+  /* ============ PIN ============ */
+  function updateDots() {
+    for (var i = 0; i < dots.length; i++) {
+      dots[i].className = 'dot' + (i < pin.length ? ' on' : '');
+    }
+  }
+
+  function tampil(teks, kelas) {
+    resultEl.textContent = teks;
+    resultEl.className = 'result ' + kelas;
+  }
+
+  function reset() {
+    pin = ''; busy = false; updateDots();
+    resultEl.textContent = ''; resultEl.className = 'result';
+  }
+
+  function tekan(k) {
+    if (busy) return;
+    if (k === 'CLEAR') { pin = ''; resultEl.textContent = ''; resultEl.className = 'result'; }
+    else if (k === 'ENTER') { kirim(); return; }
+    else if (pin.length < PANJANG_PIN) { pin += k; }
+    updateDots();
+  }
+
+  function kirim() {
+    if (pin.length < PANJANG_PIN) {
+      tampil('MASUKKAN ' + PANJANG_PIN + ' DIGIT', 'err');
+      return;
+    }
+    busy = true;
+    var foto = ambilFoto();
+    tampil('Memverifikasi...', 'load');
+    google.script.run
+      .withSuccessHandler(function(res) {
+        tampil(res.status, res.ok ? 'ok' : 'err');
+        if (!res.ok) {
+          atmEl.classList.add('shake');
+          setTimeout(function(){ atmEl.classList.remove('shake'); }, 400);
+        }
+        setTimeout(reset, 3000);
+      })
+      .withFailureHandler(function() {
+        tampil('ERROR SISTEM', 'err');
+        setTimeout(reset, 3000);
+      })
+      .cekPin(pin, foto, jmlWajah);
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key >= '0' && e.key <= '9') tekan(e.key);
+    else if (e.key === 'Enter') tekan('ENTER');
+    else if (e.key === 'Backspace') { if (!busy) { pin = pin.slice(0, -1); updateDots(); } }
+    else if (e.key === 'Escape') tekan('CLEAR');
+  });
+
+  mulaiKamera();
+</script>
+</body>
+</html>
